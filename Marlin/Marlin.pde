@@ -42,6 +42,36 @@
 
 #define VERSION_STRING  "1.0.0"
 
+// Make delta curves from many straight lines (linear interpolation).
+// This is a trade-off between visible corners (not enough segments)
+// and processor overload (too many expensive sqrt calls).
+#define DELTA_SEGMENTS_PER_SECOND 200
+
+// Center-to-center distance of the holes in the diagonal push rods.
+#define DELTA_DIAGONAL_ROD 250.0 // mm
+
+// Horizontal offset from middle of printer to smooth rod center.
+#define DELTA_SMOOTH_ROD_OFFSET 175.0 // mm
+
+// Horizontal offset of the universal joints on the end effector.
+#define DELTA_EFFECTOR_OFFSET 33.0 // mm
+
+// Horizontal offset of the universal joints on the carriages.
+#define DELTA_CARRIAGE_OFFSET 18.0 // mm
+
+// Effective horizontal distance bridged by diagonal push rods.
+#define DELTA_RADIUS (DELTA_SMOOTH_ROD_OFFSET-DELTA_EFFECTOR_OFFSET-DELTA_CARRIAGE_OFFSET)
+
+// Effective X/Y positions of the three vertical towers.
+#define SIN_60 0.8660254037844386
+#define COS_60 0.5
+#define DELTA_TOWER1_X -SIN_60*DELTA_RADIUS // front left tower
+#define DELTA_TOWER1_Y -COS_60*DELTA_RADIUS
+#define DELTA_TOWER2_X SIN_60*DELTA_RADIUS // front right tower
+#define DELTA_TOWER2_Y -COS_60*DELTA_RADIUS
+#define DELTA_TOWER3_X 0.0 // back middle tower
+#define DELTA_TOWER3_Y DELTA_RADIUS
+
 // look here for descriptions of gcodes: http://linuxcnc.org/handbook/gcode/g-code.html
 // http://objects.reprap.org/wiki/Mendel_User_Manual:_RepRapGCodes
 
@@ -710,34 +740,20 @@ void process_commands()
       feedrate = 0.0;
       home_all_axis = !((code_seen(axis_codes[0])) || (code_seen(axis_codes[1])) || (code_seen(axis_codes[2])));
       
-      #if Z_HOME_DIR > 0                      // If homing away from BED do Z first
-      if((home_all_axis) || (code_seen(axis_codes[Z_AXIS]))) {
-        HOMEAXIS(Z);
-      }
-      #endif
-      
       #ifdef QUICK_HOME
-      if((home_all_axis)||( code_seen(axis_codes[X_AXIS]) && code_seen(axis_codes[Y_AXIS])) )  //first diagonal move
+      if (home_all_axis)  // move all carriages up together until the first endstop is hit
       {
-        current_position[X_AXIS] = 0;current_position[Y_AXIS] = 0;  
-
+        current_position[X_AXIS] = 0;
+        current_position[Y_AXIS] = 0;
+        current_position[Z_AXIS] = 0;
         plan_set_position(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS]); 
-        destination[X_AXIS] = 1.5 * X_MAX_LENGTH * X_HOME_DIR;destination[Y_AXIS] = 1.5 * Y_MAX_LENGTH * Y_HOME_DIR;  
+
+        destination[X_AXIS] = 1.5 * X_MAX_LENGTH * X_HOME_DIR;
+        destination[Y_AXIS] = 1.5 * Y_MAX_LENGTH * Y_HOME_DIR;
+        destination[Z_AXIS] = 1.5 * Z_MAX_LENGTH * Z_HOME_DIR;
         feedrate = homing_feedrate[X_AXIS]; 
-        if(homing_feedrate[Y_AXIS]<feedrate)
-          feedrate =homing_feedrate[Y_AXIS]; 
         plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
         st_synchronize();
-    
-        axis_is_at_home(X_AXIS);
-        axis_is_at_home(Y_AXIS);
-        plan_set_position(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS]);
-        destination[X_AXIS] = current_position[X_AXIS];
-        destination[Y_AXIS] = current_position[Y_AXIS];
-        plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
-        feedrate = 0.0;
-        st_synchronize();
-        endstops_hit_on_purpose();
       }
       #endif
       
@@ -750,11 +766,9 @@ void process_commands()
         HOMEAXIS(Y);
       }
       
-      #if Z_HOME_DIR < 0                      // If homing towards BED do Z last
       if((home_all_axis) || (code_seen(axis_codes[Z_AXIS]))) {
         HOMEAXIS(Z);
       }
-      #endif
       
       if(code_seen(axis_codes[X_AXIS])) 
       {
