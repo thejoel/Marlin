@@ -1625,13 +1625,44 @@ void prepare_move()
   clamp_to_software_endstops(destination);
 
   previous_millis_cmd = millis(); 
-  // Do not use feedmultiply for E or Z only moves
-  if( (current_position[X_AXIS] == destination [X_AXIS]) && (current_position[Y_AXIS] == destination [Y_AXIS])) {
-      plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
+
+  float difference[NUM_AXIS];
+  for (int8_t i=0; i < NUM_AXIS; i++) {
+    difference[i] = destination[i] - current_position[i];
   }
-  else {
-    plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate*feedmultiply/60/100.0, active_extruder);
+  float cartesian_mm = sqrt(sq(difference[X_AXIS]) +
+			    sq(difference[Y_AXIS]) +
+			    sq(difference[Z_AXIS]));
+  if (cartesian_mm < 0.000001) { cartesian_mm = abs(difference[E_AXIS]); }
+  if (cartesian_mm < 0.000001) { return; }
+  float seconds = 6000 * cartesian_mm / feedrate / feedmultiply;
+  int steps = max(1, int(DELTA_SEGMENTS_PER_SECOND * seconds));
+  SERIAL_ECHOPGM("mm="); SERIAL_ECHO(cartesian_mm);
+  SERIAL_ECHOPGM(" seconds="); SERIAL_ECHO(seconds);
+  SERIAL_ECHOPGM(" steps="); SERIAL_ECHOLN(steps);
+  float delta[3];
+  for (int s = 1; s <= steps; s++) {
+    float fraction = float(s) / float(steps);
+    for(int8_t i=0; i < NUM_AXIS; i++) {
+      destination[i] = current_position[i] + difference[i] * fraction;
+    }
+    delta[X_AXIS] = sqrt(sq(DELTA_DIAGONAL_ROD)
+			 - sq(DELTA_TOWER1_X-destination[X_AXIS])
+			 - sq(DELTA_TOWER1_Y-destination[Y_AXIS])
+			 ) + destination[Z_AXIS];
+    delta[Y_AXIS] = sqrt(sq(DELTA_DIAGONAL_ROD)
+			 - sq(DELTA_TOWER2_X-destination[X_AXIS])
+			 - sq(DELTA_TOWER2_Y-destination[Y_AXIS])
+			 ) + destination[Z_AXIS];
+    delta[Z_AXIS] = sqrt(sq(DELTA_DIAGONAL_ROD)
+			 - sq(DELTA_TOWER3_X-destination[X_AXIS])
+			 - sq(DELTA_TOWER3_Y-destination[Y_AXIS])
+			 ) + destination[Z_AXIS];
+    plan_buffer_line(delta[X_AXIS], delta[Y_AXIS], delta[Z_AXIS],
+		     destination[E_AXIS], feedrate*feedmultiply/60/100.0,
+		     active_extruder);
   }
+
   for(int8_t i=0; i < NUM_AXIS; i++) {
     current_position[i] = destination[i];
   }
