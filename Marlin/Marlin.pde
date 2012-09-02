@@ -742,7 +742,7 @@ void process_commands()
       home_all_axis = !((code_seen(axis_codes[0])) || (code_seen(axis_codes[1])) || (code_seen(axis_codes[2])));
       
       #ifdef QUICK_HOME
-      if (home_all_axis)  // move all carriages up together until the first endstop is hit
+      if (home_all_axis)  // Move all carriages up together until the first endstop is hit.
       {
         current_position[X_AXIS] = 0;
         current_position[Y_AXIS] = 0;
@@ -752,9 +752,13 @@ void process_commands()
         destination[X_AXIS] = 1.5 * X_MAX_LENGTH * X_HOME_DIR;
         destination[Y_AXIS] = 1.5 * Y_MAX_LENGTH * Y_HOME_DIR;
         destination[Z_AXIS] = 1.5 * Z_MAX_LENGTH * Z_HOME_DIR;
-        feedrate = homing_feedrate[X_AXIS]; 
+        feedrate = 1.732 * homing_feedrate[X_AXIS];
         plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
         st_synchronize();
+
+        current_position[X_AXIS] = destination[X_AXIS];
+        current_position[Y_AXIS] = destination[Y_AXIS];
+        current_position[Z_AXIS] = destination[Z_AXIS];
       }
       #endif
       
